@@ -2,18 +2,55 @@ from django.shortcuts import render
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
+from django.db.models import F
 
 from .models import Movie, Review
 
 from .forms import ReviewForm
 
+
+from django.shortcuts import render
+from django.core.management.base import BaseCommand
+from movie.models import Movie
+import os
+import numpy as np
+
+import openai
+from openai.embeddings_utils import get_embedding, cosine_similarity
+from dotenv import load_dotenv, find_dotenv
+
+
 def home(request):
     searchTerm = request.GET.get('searchMovie')
-    if searchTerm: 
-       movies = Movie.objects.filter(title__icontains=searchTerm) 
+    if searchTerm:
+        movies = Movie.objects.filter(title__icontains=searchTerm) 
     else: 
         movies = Movie.objects.all()
     return render(request, 'home.html', {'searchTerm':searchTerm, 'movies': movies})
+
+
+def recommendations(request):
+    #Se lee del archivo .env la api key de openai
+    description = request.GET.get('searchMovie')
+    if(description):
+        _ = load_dotenv('../openAI.env')
+        openai.api_key  = os.environ['openAI_api_key']
+        items = Movie.objects.all()
+        emb_req = get_embedding(description,engine='text-embedding-ada-002')
+
+        sim = []
+        for i in range(len(items)):
+            emb = items[i].emb
+            emb = list(np.frombuffer(emb))
+            sim.append(cosine_similarity(emb,emb_req))
+        sim = np.array(sim)
+        idx = np.argmax(sim)
+        idx = int(idx)
+        respuesta=[(items[idx])]
+
+        return render(request, 'recommendations.html', {'searchTerm': description, 'movies': respuesta})
+    else:
+        return render(request, 'recommendations.html')
 
 
 def about(request):
